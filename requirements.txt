@@ -1,0 +1,4 @@
+# Runtime dependencies for the website, pinned to the version installed and tested
+# (Python 3.13.16, October 14, 2026). The scoring engine itself uses only the standard library.
+-e .
+streamlit==1.66.0

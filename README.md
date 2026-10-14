@@ -2,9 +2,17 @@
 
 Prof-Match helps students compare sections of the same course based on what matters to them, and explains the tradeoffs before they register.
 
-It is a content-based, rule-based comparison tool. It is not a trained machine-learning model, and its alignment score is not a grade prediction.
+```
+Professor form (Google/Microsoft Forms) ──► exported CSV ──► importer (checks + audit)
+                                                                     │
+Student answers 4 questions on the website ──► matching engine ◄─────┘
+                                                     │
+                                       ranked matches + explanations
+```
 
-> **Status: M0 (scoring engine).** All data in this repository is synthetic. Course PM101 and Instructors A, B and C are fictional.
+It is a content-based, rule-based comparison tool. It is not a trained machine-learning model, and its alignment score is not a grade prediction. Instructor answers are self-reported.
+
+> **Status:** working website on synthetic data. Course PM101/PM102 and Instructors A–H are fictional.
 
 ## Setup
 
@@ -20,47 +28,56 @@ pip install -r requirements-dev.txt
 ## Run
 
 ```bash
-pytest                                                    # run the tests
-python -m profmatch.demo                                  # both demo students
-python -m profmatch.demo --student 1                      # one demo student
-python -m profmatch.demo --prefs 2,-,1,4 --weights 3,0,2,1  # your own inputs
+streamlit run app.py               # the website; opens in your browser
+pytest                             # all tests
+python -m profmatch.demo           # command-line version of the engine
 ```
 
-Value order is always: format, assessment, collaboration, structure. Use `-` for "No preference" (its weight must be 0).
+On the website, use **Try an example** in the sidebar to load demo students 1 and 2.
+
+## Using real professor responses
+
+1. Build the form from `docs/PROFESSOR_FORM.md` (keep the `Q1.`–`Q10.` numbers).
+2. Export responses as CSV and save them as `data/private/professor_responses.csv`.
+3. Refresh the website and choose **Pilot data** in the sidebar.
+
+`data/private/` is excluded from git. Rows without consent are skipped, "Not sure" stays unknown, a resubmission replaces the earlier one, and every skipped row is listed under **Data status** with its reason.
 
 ## How the score works
 
-Each dimension uses a 1–5 scale (anchors in `src/profmatch/scale.py`). For student preference *p*, section value *x* and importance weight *w* (0–3):
+Each question uses a 1–5 scale. For student answer *s*, instructor answer *p* and importance *w* (1–3):
 
 ```
-similarity = 1 - |p - x| / 4
-alignment  = 100 * Σ(w · similarity over rated dimensions with evidence) / W_known
-coverage   = W_known / W
+similarity = 1 - |p - s| / 4
+alignment  = 100 * Σ(w · similarity) / Σ(w)        over questions the student rated
 ```
 
-*W* is the total weight the student assigned; *W_known* is the weight on dimensions where the section actually has evidence.
+In matrix form, with every instructor's answers stacked as rows of *P*:
+`scores = 100 · (1 − |P − s| · w / (4 · Σw))`. It measures the gap between answers rather than multiplying them, because a plain dot product would rank a 5 above a 1 for a student who answered 1.
 
-**Missing data.** An unknown value stays unknown. It is never treated as 0 or as the midpoint 3. Only sections with evidence on every dimension the student rated are ranked. Sections with gaps go to a separate "More information needed" group, sorted by section ID, with their partial score shown for transparency only.
+**Missing data.** "Not sure" stays unknown; it is never treated as 3. Only instructors with answers to every question the student rated are ranked; the rest appear under "More information needed" with a partial score for transparency.
 
-**Display and ties.** Scores are computed exactly (`fractions.Fraction`) and displayed as whole numbers rounded half-up. Sections with the same displayed score share a rank (1, 1, 3) and are listed by section ID.
-
-**No preferences.** If every weight is 0, there is no score and no ranking, only a descriptive comparison.
+**Display and ties.** Scores are computed exactly (`fractions.Fraction`) and shown as whole numbers rounded half-up. Equal displayed scores share a rank (1, 1, 3) and are listed alphabetically.
 
 ## Layout
 
 ```
+app.py             the website (display only; no scoring logic)
 src/profmatch/
-  scale.py         dimensions, anchors, importance levels (the instrument)
-  validation.py    strict input checks; rejects rather than coerces
-  models.py        StudentPreferences, SectionProfile (validate on creation)
-  matching.py      scoring, missingness policy, ranking (pure functions)
-  explanations.py  deterministic explanation templates
-  synthetic.py     fictional PM101 fixtures
+  scale.py         questions, 1–5 anchors, importance levels
+  validation.py    strict input checks
+  models.py        StudentPreferences, SectionProfile
+  matching.py      scoring, missing-data policy, ranking
+  explanations.py  deterministic explanation text
+  forms.py         imports form exports, with an audit of skipped rows
+  synthetic.py     fictional fixtures used by tests and the CLI demo
   demo.py          command-line demo
-tests/             pytest suite
-docs/PROGRESS.md   progress log
+data/demo/         synthetic responses in the same format as a real export
+data/templates/    empty spreadsheet with the form's columns
+docs/              professor form, progress log
+tests/             pytest suite, including headless website tests
 ```
 
 ## Contributions
 
-See `docs/PROGRESS.md`. Code in session 1 was drafted with an AI assistant (Claude) from Saad Eddine Dahbani's project handoff and verified by running the test suite.
+See `docs/PROGRESS.md`. Code was drafted with an AI assistant (Claude) from Saad Eddine Dahbani's design and project handoff, and verified by running the test suite.

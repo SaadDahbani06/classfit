@@ -179,7 +179,7 @@ def _headline(result: MatchResult) -> str:
 def explain(result: MatchResult) -> Explanation:
     caveats = [NOT_A_PREDICTION, f"Evidence source: {result.profile.source}."]
     if result.profile.is_synthetic:
-        caveats.insert(0, "SYNTHETIC: fictional section used for demonstration only.")
+        caveats.insert(0, "SYNTHETIC: fictional data used for demonstration only.")
     scored = result.status in (COMPLETE, PARTIAL)
     return Explanation(
         section_id=result.section_id,

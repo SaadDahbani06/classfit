@@ -1,5 +1,44 @@
 # Progress log
 
+## 2026-10-14 — Session 2: surveys + website (simplified design)
+
+**Design change (Saad's decision).** Simplest workable version: professors fill out a form describing their course; students answer the same four questions on a website; the engine matches them. The student "survey" is the website itself, and nothing a student enters is saved.
+
+**Who did what.** Design direction: Saad. Code, form text and tests drafted by Claude (AI assistant); Saad to review, run and be able to explain. No teammate contributions yet.
+
+### Completed
+- `docs/PROFESSOR_FORM.md`: paste-ready form (Q1–Q10), consent wording, export steps, a draft invitation message for Saad to edit and send himself.
+- `src/profmatch/forms.py`: imports Google/Microsoft Forms CSV exports. Finds columns by question number; skips rows without consent; "Not sure" → unknown; rejects unreadable answers; later resubmission replaces earlier; records every skipped/replaced row; SHA-256 fingerprint of the file; groups by course and term.
+- `app.py`: Streamlit website. Course choice, four questions with importance, ranked cards with reasons/tradeoff/missing info, "Why this result?" breakdown, side-by-side table (the non-personalized baseline view), persistent synthetic/pilot banner, example-student buttons for demos, reset button.
+- Synthetic demo responses in the exact export format (PM101: A–E, PM102: F–G, plus one no-consent row and one resubmission), and an empty template.
+- Streamlit usage statistics turned off in `.streamlit/config.toml`.
+
+### Verified (actually run)
+- `pytest`: 154 passed (Python 3.13.16, pytest 9.1.1, Streamlit 1.66.0), including 7 headless website tests (Streamlit AppTest).
+- Website flows: first load shows banner and no scores; example student 1 → A 89, E 78, D 61, B 28, C partial 96 unranked; example student 2 → B 100 first; one answered question → ranking; reset clears answers; second course loads.
+- Importer mutation check: ignoring consent, turning "Not sure" into 3, and keeping the first submission each made tests fail.
+- `streamlit run app.py` started and its health check answered "ok".
+- **Not verified:** how the page looks. No browser was available in the build environment, so no screenshot was taken.
+
+### Deviations from the roadmap
+- Instructor self-reports only for now. Student experience reports (section J aggregation, medians, ≥5 threshold, conflicts) deferred; profiles are labeled "self-reported by the instructor".
+- CSV import instead of a SQLite data model (section M). Simpler for one course; SQL can be added if the data grows or the résumé needs it.
+- Schedule filtering still deferred.
+
+### Unresolved
+- Real responses live in gitignored `data/private/`, so a hosted copy of the site would not see them. Before deploying, decide how to publish consented responses (e.g., commit an approved file, or use hosting secrets).
+- Deployment untested; not deployed.
+- Form wording not yet tested with a professor.
+- Organizer details, pilot course and interviews still open (see session 1).
+
+### Next actions
+1. Saad: run `streamlit run app.py`, click both example students, check layout on laptop and phone width.
+2. Saad: create the form, fill it in once yourself as a test, export, and load it as pilot data.
+3. Saad: ask 2–3 professors of one course to fill it out.
+4. Next build: schedule conflicts (optional), deployment plan, evaluation logging for the user study.
+
+---
+
 ## 2026-10-14 — Session 1: M0 scoring engine
 
 **Who did what.** Code drafted by Claude (AI assistant) from Saad's handoff; Saad reviews, runs and must be able to explain it. No teammate contributions yet.
