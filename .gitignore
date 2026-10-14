@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets and local config
+.env
+.streamlit/secrets.toml
+
+# Local databases (may contain real reports)
+*.db
+*.sqlite
+*.sqlite3
+
+# Private pilot data: raw reports, evaluation responses, contact lists.
+# Only synthetic fixtures and approved public aggregates are committed.
+data/private/
+data/raw/
+data/evaluation/
+contacts*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

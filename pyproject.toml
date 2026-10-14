@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prof-match"
+version = "0.1.0"
+description = "Explainable comparison of course sections based on stated student preferences."
+readme = "README.md"
+# Developed and tested on Python 3.13. The code uses 3.10+ syntax (X | None).
+requires-python = ">=3.10"
+dependencies = []  # M0 engine uses the standard library only.
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Lets `pytest` find the package even before `pip install -e .`
+pythonpath = ["src"]
