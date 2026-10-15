@@ -138,12 +138,13 @@ def _tradeoff(result: MatchResult) -> str | None:
     ]
     if not candidates:
         return None
+    # The mismatch that cost the most weighted points, not simply the biggest gap.
     d = min(candidates, key=lambda d: (-d.lost, DIMENSIONS.index(d.dimension)))
     return (
         f"Tradeoff on {DIMENSION_LABELS[d.dimension]}: you prefer "
-        f"{describe_value(d.dimension, d.preference)}, this section is "
-        f"{describe_value(d.dimension, d.observed)} ({_gap(d)} on a dimension you rated "
-        f"{IMPORTANCE_LABELS[d.weight]}; costs {_pts(d.lost)} {_of_points(result.known_weight)} scored)."
+        f"{describe_value(d.dimension, d.preference)}; this section is "
+        f"{describe_value(d.dimension, d.observed)}. That's a {_gap(d)} on something you rated "
+        f"{IMPORTANCE_LABELS[d.weight]}."
     )
 
 

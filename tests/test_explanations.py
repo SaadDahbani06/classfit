@@ -52,8 +52,7 @@ def test_b_for_student_1_has_no_forced_positive_reasons():
     exp = explain(score_section(STUDENT_1, SECTION_B))
     assert exp.reasons == ()
     assert "class format" in exp.tradeoff  # ties with assessment at 2.25 lost; dimension order breaks it
-    assert "3-point gap" in exp.tradeoff
-    assert "2.25 of 9 points" in exp.tradeoff
+    assert "3-point gap on something you rated very important" in exp.tradeoff
 
 
 def test_c_for_student_1_explains_why_it_is_not_ranked():
@@ -65,9 +64,15 @@ def test_c_for_student_1_explains_why_it_is_not_ranked():
     assert "unknown" in assessment_line and "not assumed neutral" in assessment_line
 
 
-def test_partial_tradeoff_is_measured_against_scored_points():
-    exp = explain(score_section(STUDENT_2, SECTION_C))
-    assert "of 6 points scored" in exp.tradeoff  # W_known = 6, not W = 9
+def test_tradeoff_is_the_costliest_mismatch_not_the_biggest_gap():
+    # format: 2-point gap, very important -> loses 3 * 0.5  = 1.50 points
+    # structure: 3-point gap, slightly important -> loses 1 * 0.25 = 0.75 points
+    student = StudentPreferences.from_lists([1, None, None, 5], [3, 0, 0, 1])
+    section = SectionProfile.from_lists("S-01", "PM101", "Instructor S (fictional)",
+                                        [3, 3, 3, 2], "synthetic fixture", True)
+    exp = explain(score_section(student, section))
+    assert exp.tradeoff.startswith("Tradeoff on class format")
+    assert "2-point gap" in exp.tradeoff
 
 
 def test_insufficient_evidence_explanation():

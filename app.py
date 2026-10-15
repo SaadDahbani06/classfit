@@ -8,9 +8,15 @@ never disagree with the tested engine. Nothing a student enters is saved.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import streamlit as st
+
+ROOT = Path(__file__).resolve().parent
+# Find the profmatch package in src/ even if `pip install -r requirements.txt` was skipped.
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
 
 from profmatch.explanations import NO_CLOSE_MATCH, NOT_A_PREDICTION, describe_value, explain
 from profmatch.forms import (
@@ -34,7 +40,6 @@ from profmatch.scale import DIMENSION_LABELS, DIMENSION_QUESTIONS, DIMENSIONS, I
 from profmatch.synthetic import DEMO_STUDENTS
 from profmatch.validation import ValidationError
 
-ROOT = Path(__file__).parent
 DEMO_FILE = ROOT / "data" / "demo" / "professor_responses_demo.csv"
 PILOT_FILE = ROOT / "data" / "private" / "professor_responses.csv"
 DEMO, PILOT = "Synthetic demo", "Pilot data"
@@ -95,7 +100,11 @@ def render_card(result: MatchResult, entry: ProfessorEntry, rank: int | None) ->
             if result.display_score is not None:
                 label = "Alignment" if result.eligible_for_ranking else "Partial (not ranked)"
                 st.metric(label, f"{result.display_score}/100")
-        st.write(exp.headline)
+        if result.eligible_for_ranking:
+            # The score is already shown as the big number; don't repeat it in a sentence.
+            st.caption("This instructor answered every question you rated.")
+        else:
+            st.write(exp.headline)
         for reason in exp.reasons:
             st.markdown(f"✅ {reason}")
         if result.alignment is not None and not exp.reasons:
