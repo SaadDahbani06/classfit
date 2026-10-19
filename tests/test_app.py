@@ -86,3 +86,15 @@ def test_second_course_can_be_selected(app):
     app.sidebar.button[0].click().run()
     assert not app.exception
     assert len(metrics(app)) == 2  # PM102 has two consenting instructors
+
+
+def test_best_fit_banner_names_the_top_instructor(app):
+    app.sidebar.button[0].click().run()
+    assert any("Your best fit" in s.value and "Instructor A" in s.value.replace("\\", "") and "89/100" in s.value
+               for s in app.success)
+
+
+def test_main_page_example_button_loads_example(app):
+    next(b for b in app.button if b.key == "main_example_2").click().run()
+    assert metrics(app)[0] == ("Alignment", "100/100")
+    assert not [b for b in app.button if b.key == "main_example_2"]  # hidden once answers exist

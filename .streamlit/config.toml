@@ -2,6 +2,10 @@
 # Do not send Streamlit usage statistics: the site promises not to track students.
 gatherUsageStats = false
 
+[client]
+# Students don't need Streamlit's developer menu or the "Deploy" button.
+toolbarMode = "minimal"
+
 # Marist Red Foxes colours. Fonts are the system's own (no web-font requests),
 # so the page still loads nothing from third parties.
 [theme]

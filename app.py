@@ -37,7 +37,7 @@ from profmatch.matching import (
     compare_sections,
 )
 from profmatch.models import StudentPreferences
-from profmatch.scale import DIMENSION_LABELS, DIMENSION_QUESTIONS, DIMENSIONS, IMPORTANCE_LABELS
+from profmatch.scale import DIMENSION_LABELS, DIMENSION_QUESTIONS, DIMENSIONS, IMPORTANCE_LABELS, SCALE_ANCHORS
 from profmatch.synthetic import DEMO_STUDENTS
 from profmatch.validation import ValidationError
 
@@ -67,6 +67,12 @@ STYLE = f"""
 }}
 .pm-hero h1 {{ color: #fff; font-size: 2.4rem; font-weight: 800; margin: .15rem 0 .35rem; padding: 0; }}
 .pm-hero p {{ margin: 0; max-width: 32rem; font-size: 1.02rem; opacity: .95; }}
+.pm-how {{ display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; position: relative; z-index: 1; }}
+.pm-how span {{
+  background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 999px; padding: .25rem .75rem; font-size: .85rem; font-weight: 600;
+}}
+.pm-legend {{ display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; font-size: .85rem; opacity: .8; margin: .2rem 0 .6rem; }}
 .pm-step {{ display: flex; align-items: center; gap: .7rem; margin: 1.6rem 0 .2rem; }}
 .pm-step .pm-num {{
   flex: none; width: 2rem; height: 2rem; border-radius: 50%;
@@ -121,6 +127,12 @@ def step(number: int, title: str) -> None:
         f'<span class="pm-title">{html.escape(title)}</span></div>',
         unsafe_allow_html=True,
     )
+
+
+def question_help(dimension: str) -> str:
+    anchors = SCALE_ANCHORS[dimension]
+    return (f"**1** = {anchors[1]}  \n**3** = {anchors[3]}  \n**5** = {anchors[5]}\n\n"
+            "2 and 4 are in between. Neither end is better; it's about what suits you.")
 
 
 def render_side_by_side(group: tuple[ProfessorEntry, ...], expanded: bool) -> None:
@@ -226,7 +238,9 @@ st.html(
     '<div class="pm-hero"><div class="pm-kicker">Marist Red Foxes · Course planning</div>'
     "<h1>Prof-Match</h1>"
     "<p>Compare sections of the same course by how they're taught, "
-    "and see the tradeoffs before you register.</p></div>"
+    "and see the tradeoffs before you register.</p>"
+    '<div class="pm-how"><span>① Pick your course</span><span>② Tell us how you like to learn</span>'
+    "<span>③ See your best fits</span></div></div>"
 )
 if synthetic:
     st.warning("**Synthetic demo.** Every instructor and answer here is fictional, for demonstration only.", icon="🧪")
@@ -250,7 +264,8 @@ st.caption(f"{len(group)} instructor(s) answered for this course. "
            "Prerequisites, seats and registration eligibility are not checked.")
 
 step(2, "What matters to you?")
-st.caption("Answer only what you care about and leave the rest as 'No preference'.")
+st.caption("Answer only what you care about and leave the rest as 'No preference'. "
+           "Hover the ? next to a question to see what the numbers mean.")
 for d in DIMENSIONS:
     with st.container(border=True):
         left, right = st.columns([3, 2])
@@ -260,6 +275,7 @@ for d in DIMENSIONS:
                 options=[NO_PREFERENCE, 1, 2, 3, 4, 5],
                 format_func=lambda v, d=d: "No preference" if v == NO_PREFERENCE else describe_value(d, v),
                 key=f"pref_{d}",
+                help=question_help(d),
             )
         with right:
             if st.session_state[f"pref_{d}"] != NO_PREFERENCE:
@@ -268,9 +284,10 @@ for d in DIMENSIONS:
                     options=[1, 2, 3],
                     format_func=lambda w: IMPORTANCE_LABELS[w].capitalize(),
                     key=f"imp_{d}",
+                    help="Very important questions count three times as much as slightly important ones.",
                 )
             else:
-                st.caption("Not used in your comparison.")
+                st.caption("Pick an answer to include this in your comparison.")
 values = {d: st.session_state[f"pref_{d}"] or None for d in DIMENSIONS}
 answered = sum(v is not None for v in values.values())
 left, right = st.columns([3, 1], vertical_alignment="center")
@@ -289,10 +306,24 @@ entry_for = {e.profile.section_id: e for e in group}
 if comparison.mode == MODE_NO_PREFERENCES:
     st.info("Answer at least one question above to see alignment scores. "
             "Until then, here is every instructor's answers side by side.")
+    if synthetic:
+        st.write("**Not sure where to start?** Load an example student to see how it works:")
+        one, two = st.columns(2)
+        one.button("🦊 Try example student 1", on_click=load_example, args=("1",),
+                   key="main_example_1", use_container_width=True)
+        two.button("🦊 Try example student 2", on_click=load_example, args=("2",),
+                   key="main_example_2", use_container_width=True)
     render_side_by_side(group, expanded=True)
 else:
     if comparison.mode == MODE_RANKED:
-        st.caption("Closest alignment with your answers first. Equal displayed scores share a rank.")
+        best = [r for r in comparison.ranked if r.rank == 1]
+        names = " and ".join(f"**{md_escape(entry_for[r.result.section_id].name)}**" for r in best)
+        st.success(f"Your best fit: {names} with {best[0].result.display_score}/100 alignment. "
+                   "Details for every instructor are below.", icon="🦊")
+        st.caption("Closest alignment with your answers first. 100 means the instructor teaches exactly "
+                   "the way you said you prefer. Equal displayed scores share a rank.")
+        st.html('<div class="pm-legend"><span>✅ close to what you want</span>'
+                "<span>⚠️ a tradeoff to know about</span><span>❔ instructor didn't say</span></div>")
     elif comparison.mode == MODE_SINGLE_OPTION:
         st.info("Only one instructor has information on everything you rated, so there is nothing to rank it against.")
     elif comparison.mode == MODE_UNRANKED_INCOMPLETE:
