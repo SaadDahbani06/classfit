@@ -7,6 +7,7 @@ never disagree with the tested engine. Nothing a student enters is saved.
 
 from __future__ import annotations
 
+import html
 import re
 import sys
 from pathlib import Path
@@ -45,7 +46,47 @@ PILOT_FILE = ROOT / "data" / "private" / "professor_responses.csv"
 DEMO, PILOT = "Synthetic demo", "Pilot data"
 NO_PREFERENCE = 0  # selectbox value meaning "No preference"
 
-st.set_page_config(page_title="Prof-Match", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="Prof-Match · Red Foxes", page_icon="🦊", layout="centered")
+
+MARIST_RED = "#C8102E"
+STYLE = f"""
+<style>
+.pm-hero {{
+  background: linear-gradient(135deg, {MARIST_RED} 0%, #8E0B21 100%);
+  color: #fff; border-radius: 1.1rem; padding: 1.6rem 1.75rem 1.4rem;
+  margin-bottom: .5rem; position: relative; overflow: hidden;
+  box-shadow: 0 10px 30px -12px rgba(142, 11, 33, .55);
+}}
+.pm-hero::after {{
+  content: "🦊"; position: absolute; right: -.4rem; bottom: -1.6rem;
+  font-size: 7.5rem; opacity: .18; transform: rotate(-12deg);
+}}
+.pm-hero .pm-kicker {{
+  text-transform: uppercase; letter-spacing: .14em; font-size: .72rem;
+  font-weight: 700; opacity: .85;
+}}
+.pm-hero h1 {{ color: #fff; font-size: 2.4rem; font-weight: 800; margin: .15rem 0 .35rem; padding: 0; }}
+.pm-hero p {{ margin: 0; max-width: 32rem; font-size: 1.02rem; opacity: .95; }}
+.pm-step {{ display: flex; align-items: center; gap: .7rem; margin: 1.6rem 0 .2rem; }}
+.pm-step .pm-num {{
+  flex: none; width: 2rem; height: 2rem; border-radius: 50%;
+  background: {MARIST_RED}; color: #fff; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}}
+.pm-step .pm-title {{ font-size: 1.35rem; font-weight: 800; }}
+.pm-pill {{
+  display: inline-block; background: {MARIST_RED}; color: #fff; font-size: .7rem;
+  font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: .15rem .55rem; border-radius: 999px; margin-left: .4rem; vertical-align: middle;
+}}
+[class*="st-key-card-top"] {{
+  border-left: 5px solid {MARIST_RED} !important;
+  background: linear-gradient(90deg, rgba(200, 16, 46, .06), transparent 40%);
+}}
+.pm-footer {{ text-align: center; font-size: .8rem; opacity: .7; margin-top: .5rem; }}
+</style>
+"""
+st.html(STYLE)
 
 
 # --------------------------------------------------------------------------- helpers
@@ -74,6 +115,14 @@ def load_example(key: str) -> None:
         st.session_state[f"imp_{d}"] = example.weights[d] or 1
 
 
+def step(number: int, title: str) -> None:
+    st.markdown(
+        f'<div class="pm-step"><span class="pm-num">{number}</span>'
+        f'<span class="pm-title">{html.escape(title)}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_side_by_side(group: tuple[ProfessorEntry, ...], expanded: bool) -> None:
     with st.expander("All instructors' answers side by side (no personalization)", expanded=expanded):
         rows = []
@@ -89,17 +138,22 @@ def render_side_by_side(group: tuple[ProfessorEntry, ...], expanded: bool) -> No
 
 def render_card(result: MatchResult, entry: ProfessorEntry, rank: int | None) -> None:
     exp = explain(result)
-    with st.container(border=True):
+    top = rank == 1
+    key = re.sub(r"[^A-Za-z0-9_-]", "-", result.section_id)
+    with st.container(border=True, key=f"card-{'top-' if top else ''}{key}"):
         left, right = st.columns([3, 1])
         with left:
             title = f"#{rank} · {entry.name}" if rank is not None else entry.name
-            st.markdown(f"**{md_escape(title)}**")
+            pill = '<span class="pm-pill">🦊 Top match</span>' if top else ""
+            st.markdown(f"**{md_escape(title)}**{pill}", unsafe_allow_html=True)
             meta = [entry.course, entry.term] + ([f"Section(s) {entry.sections}"] if entry.sections else [])
             st.caption(md_escape(" · ".join(meta)))
         with right:
             if result.display_score is not None:
                 label = "Alignment" if result.eligible_for_ranking else "Partial (not ranked)"
                 st.metric(label, f"{result.display_score}/100")
+        if result.display_score is not None and result.eligible_for_ranking:
+            st.progress(result.display_score / 100)
         if result.eligible_for_ranking:
             # The score is already shown as the big number; don't repeat it in a sentence.
             st.caption("This instructor answered every question you rated.")
@@ -168,8 +222,12 @@ with st.sidebar:
 
 # --------------------------------------------------------------------------- page
 
-st.title("Prof-Match")
-st.write("Compare sections of the same course by how they're taught, and see the tradeoffs before you register.")
+st.html(
+    '<div class="pm-hero"><div class="pm-kicker">Marist Red Foxes · Course planning</div>'
+    "<h1>Prof-Match</h1>"
+    "<p>Compare sections of the same course by how they're taught, "
+    "and see the tradeoffs before you register.</p></div>"
+)
 if synthetic:
     st.warning("**Synthetic demo.** Every instructor and answer here is fictional, for demonstration only.", icon="🧪")
 else:
@@ -181,7 +239,7 @@ if not groups:
     st.error("No instructor responses could be loaded. Check 'Data status' in the sidebar.")
     st.stop()
 
-st.subheader("1. Choose a course")
+step(1, "Choose a course")
 if st.session_state.get("course") not in groups:
     st.session_state.pop("course", None)
 course = st.selectbox(
@@ -191,7 +249,7 @@ group = groups[course]
 st.caption(f"{len(group)} instructor(s) answered for this course. "
            "Prerequisites, seats and registration eligibility are not checked.")
 
-st.subheader("2. What matters to you?")
+step(2, "What matters to you?")
 st.caption("Answer only what you care about and leave the rest as 'No preference'.")
 for d in DIMENSIONS:
     with st.container(border=True):
@@ -213,13 +271,18 @@ for d in DIMENSIONS:
                 )
             else:
                 st.caption("Not used in your comparison.")
-st.button("Clear my answers", on_click=reset_answers)
-
 values = {d: st.session_state[f"pref_{d}"] or None for d in DIMENSIONS}
+answered = sum(v is not None for v in values.values())
+left, right = st.columns([3, 1], vertical_alignment="center")
+with left:
+    st.progress(answered / len(DIMENSIONS), text=f"{answered} of {len(DIMENSIONS)} questions answered")
+with right:
+    st.button("Clear my answers", on_click=reset_answers, use_container_width=True)
+
 weights = {d: 0 if values[d] is None else st.session_state[f"imp_{d}"] for d in DIMENSIONS}
 prefs = StudentPreferences(values, weights)
 
-st.subheader("3. Your comparison")
+step(3, "Your comparison")
 comparison = compare_sections(prefs, [e.profile for e in group])
 entry_for = {e.profile.section_id: e for e in group}
 
@@ -248,3 +311,5 @@ else:
 
 st.divider()
 st.caption(f"{NOT_A_PREDICTION} Method version {comparison.method_version}.")
+st.html('<div class="pm-footer">🦊 Go Red Foxes! · An unofficial student project, '
+        "not affiliated with or endorsed by Marist University.</div>")

@@ -1,3 +1,27 @@
 [browser]
 # Do not send Streamlit usage statistics: the site promises not to track students.
 gatherUsageStats = false
+
+# Marist Red Foxes colours. Fonts are the system's own (no web-font requests),
+# so the page still loads nothing from third parties.
+[theme]
+base = "light"
+primaryColor = "#C8102E"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F6F1F1"
+textColor = "#1F1A1A"
+linkColor = "#A50D25"
+borderColor = "#E6D9D9"
+redColor = "#C8102E"
+baseRadius = "0.75rem"
+buttonRadius = "full"
+headingFontWeights = [800, 700, 700, 600, 600, 600]
+metricValueFontWeight = 800
+showWidgetBorder = true
+
+[theme.sidebar]
+backgroundColor = "#2A0A10"
+secondaryBackgroundColor = "#3D1018"
+textColor = "#F7ECEC"
+borderColor = "#5A1F29"
+linkColor = "#FFB3BF"
