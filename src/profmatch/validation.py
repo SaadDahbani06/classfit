@@ -18,7 +18,7 @@ from .scale import DIMENSIONS, SCALE_MAX, SCALE_MIN, WEIGHT_MAX, WEIGHT_MIN
 
 
 class ValidationError(ValueError):
-    """Input violates the Prof-Match input contract."""
+    """Input violates the engine's input contract."""
 
 
 def _is_int(value: Any) -> bool:
@@ -34,7 +34,7 @@ def _describe(value: Any) -> str:
 
 
 def check_dimension_keys(mapping: Any, what: str) -> None:
-    """Require exactly the four known dimension keys.
+    """Require exactly the known dimension keys (scale.DIMENSIONS).
 
     Missing keys are rejected rather than treated as unknown: an unknown value
     must be stated explicitly as ``None`` so that "we forgot to supply it" and

@@ -6,26 +6,42 @@ gatherUsageStats = false
 # Students don't need Streamlit's developer menu or the "Deploy" button.
 toolbarMode = "minimal"
 
-# Marist Red Foxes colours. Fonts are the system's own (no web-font requests),
-# so the page still loads nothing from third parties.
+# Serves static/fonts, so the fonts come from this app and it still loads nothing
+# from third parties (and the site works with no internet at all).
+[server]
+enableStaticServing = true
+
+# ClassFit design (warm light page, Marist red accent).
+# Component styles live in app.py (STYLE); these set Streamlit's base theme.
 [theme]
 base = "light"
 primaryColor = "#C8102E"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F6F1F1"
-textColor = "#1F1A1A"
-linkColor = "#A50D25"
-borderColor = "#E6D9D9"
-redColor = "#C8102E"
-baseRadius = "0.75rem"
-buttonRadius = "full"
-headingFontWeights = [800, 700, 700, 600, 600, 600]
-metricValueFontWeight = 800
+backgroundColor = "#FBF8F6"
+secondaryBackgroundColor = "#F4EFEC"
+textColor = "#1F1A1C"
+linkColor = "#A00D25"
+borderColor = "#E7E0DC"
+font = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif"
+headingFont = "'Bricolage Grotesque', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif"
+baseRadius = "0.5rem"
+buttonRadius = "0.5rem"
 showWidgetBorder = true
+showSidebarBorder = true
+dataframeBorderColor = "#E7E0DC"
+dataframeHeaderBackgroundColor = "#F4EFEC"
+
+[[theme.fontFaces]]
+family = "Inter"
+url = "app/static/fonts/inter-latin-wght-normal.woff2"
+weight = "100 900"
+
+[[theme.fontFaces]]
+family = "Bricolage Grotesque"
+url = "app/static/fonts/bricolage-grotesque-latin-wght-normal.woff2"
+weight = "200 800"
 
 [theme.sidebar]
-backgroundColor = "#2A0A10"
-secondaryBackgroundColor = "#3D1018"
-textColor = "#F7ECEC"
-borderColor = "#5A1F29"
-linkColor = "#FFB3BF"
+backgroundColor = "#F4EFEC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1F1A1C"
+borderColor = "#E7E0DC"

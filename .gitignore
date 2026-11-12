@@ -26,7 +26,22 @@ data/raw/
 data/evaluation/
 contacts*
 
+# R session files
+.Rhistory
+.RData
+.Rproj.user/
+
 # OS / editor
 .DS_Store
 .vscode/
 .idea/
+
+# Kept off GitHub: pitch materials, internal notes, demo recording
+final product/
+what to say in demo/
+flyer_for_survey.pdf
+docs/md not needed/
+docs/pdf/
+scripts/make_pdfs.py
+*.mp4
+~$*

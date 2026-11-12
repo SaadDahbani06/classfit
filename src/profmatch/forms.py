@@ -1,11 +1,13 @@
 """Import instructor survey responses exported from Google Forms or Microsoft Forms.
 
-How columns are found: every form question starts with a number ("Q5. In this
-course, ..."). The importer looks for that prefix, so a question can be reworded
-without breaking the import, and extra columns the form tool adds (Timestamp,
-Email, ID, Start time, ...) are ignored and never displayed.
+How columns are found: every form question starts with a number ("Q1. Your name").
+The six practice questions also start with their topic ("Q5. Class discussion —
+In this course and term, ..."), so the rest of a question can be reworded without
+breaking the import, but a file from questionnaire version 1 (whose Q5-Q8 asked
+different questions) can never be read as version 2. Extra columns the form tool
+adds (Timestamp, Email, ID, Start time, ...) are ignored and never displayed.
 
-What gets loaded: only rows whose consent answer (Q10) starts with "Yes". Every
+What gets loaded: only rows whose consent answer (Q12) starts with "Yes". Every
 skipped row is recorded with its spreadsheet row number and a reason, so nothing
 disappears silently. Invalid answers are rejected, not guessed.
 """
@@ -16,30 +18,35 @@ import csv
 import hashlib
 import io
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+from .branding import PRODUCT_NAME
 from .models import SectionProfile
-from .scale import DIMENSIONS
+from .scale import DIMENSIONS, QUESTIONS, UNKNOWN_ANSWER_LABEL
 from .validation import ValidationError
 
-# Field -> question-number prefix used in the form (see docs/PROFESSOR_FORM.md).
+# Field -> start of the form question title (see the instructor form, docs/INSTRUCTOR_FORM.md).
 QUESTION_PREFIXES: dict[str, str] = {
     "name": "Q1.",
     "course": "Q2.",
     "term": "Q3.",
     "sections": "Q4.",
-    "format": "Q5.",
-    "assessment": "Q6.",
-    "collaboration": "Q7.",
-    "structure": "Q8.",
-    "note": "Q9.",
-    "consent": "Q10.",
+    **{q.key: f"Q{number}. {q.topic}" for number, q in enumerate(QUESTIONS, start=5)},
+    "note": "Q11.",
+    "consent": "Q12.",
 }
 OPTIONAL_FIELDS = {"sections", "note"}
 
-NOT_SURE_PREFIX = "not sure"
+UNKNOWN_PREFIXES = ("varies", "unable")  # "Varies / unable to answer"
 CONSENT_PREFIX = "yes"
+
+VERSION_1_MESSAGE = (
+    "This file comes from questionnaire version 1 (Q5–Q8: class format, assessment distribution, "
+    "collaboration, structure). Version 2 asks six different questions, so version-1 answers cannot "
+    "be converted. Collect new responses with the version-2 form (docs/INSTRUCTOR_FORM.md)."
+)
 
 # An answer like "3", "3 — Roughly balanced", "3 - mixed" or "3: ...": a single
 # digit 1-5 that is not part of a longer number such as "35" or "3.5".
@@ -81,15 +88,15 @@ class ImportResult:
 
 
 def parse_scale_answer(dimension: str, cell: str | None) -> int | None:
-    """'3 — Roughly balanced' -> 3; 'Not sure / it varies' or blank -> None (unknown)."""
+    """'4 — Often (61–80% of class sessions)' -> 4; 'Varies / unable to answer' or blank -> None."""
     text = (cell or "").strip()
-    if not text or text.casefold().startswith(NOT_SURE_PREFIX):
+    if not text or text.casefold().startswith(UNKNOWN_PREFIXES):
         return None
     match = _ANSWER_PATTERN.match(text)
     if not match:
         raise ValidationError(
             f"{dimension}: could not read {text!r}; expected an answer starting with 1-5, "
-            "or 'Not sure / it varies'."
+            f"or '{UNKNOWN_ANSWER_LABEL}'."
         )
     return int(match.group(1))
 
@@ -110,23 +117,43 @@ def _normalize_spaces(text: str) -> str:
 
 
 def _slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.casefold()).strip("-")
+    """'Dr. Jane Smith' -> 'dr-jane-smith'. Letters from every script are kept, so a name
+    written in, say, Chinese, Arabic or Hindi is not mistaken for a missing name, and two
+    names that differ only in accented letters are never merged into one person."""
+    text = unicodedata.normalize("NFKC", text).casefold()
+    kept = "".join(c if c.isalnum() or unicodedata.category(c).startswith("M") else " " for c in text)
+    return "-".join(kept.split())
+
+
+def _is_version_1(header: list[str]) -> bool:
+    # Version 1's last question was consent: "Q10. May Prof-Match show your name ...".
+    return any(h.strip().casefold().startswith("q10.") and "show your name" in h.casefold() for h in header)
 
 
 def _locate_columns(header: list[str]) -> dict[str, int]:
+    if _is_version_1(header):
+        raise FormImportError(VERSION_1_MESSAGE)
     located: dict[str, int] = {}
     for field, prefix in QUESTION_PREFIXES.items():
-        hits = [i for i, h in enumerate(header) if h.strip().casefold().startswith(prefix.casefold())]
+        number = prefix.split(" ", 1)[0]  # "Q5."
+        hits = [i for i, h in enumerate(header) if h.strip().casefold().startswith(number.casefold())]
         if len(hits) > 1:
-            raise FormImportError(f"More than one column starts with {prefix!r}; keep each question number unique.")
-        if hits:
-            located[field] = hits[0]
-        elif field not in OPTIONAL_FIELDS:
+            raise FormImportError(f"More than one column starts with {number!r}; keep each question number unique.")
+        if not hits:
+            if field in OPTIONAL_FIELDS:
+                continue
             raise FormImportError(
                 f"No column starts with {prefix!r} ({field}). Each form question title must begin with its "
-                "number, e.g. 'Q5. In this course, how is class time mostly spent?'. "
-                "See docs/PROFESSOR_FORM.md."
+                "number (and, for Q5–Q10, its topic), e.g. 'Q5. Class discussion — In this course and term, "
+                "...'. See docs/INSTRUCTOR_FORM.md."
             )
+        title = header[hits[0]].strip()
+        if not title.casefold().startswith(prefix.casefold()):
+            raise FormImportError(
+                f"Column {number} should start with {prefix!r} but is {title!r}. Keep each question's number "
+                "and topic at the start of its title; see docs/INSTRUCTOR_FORM.md."
+            )
+        located[field] = hits[0]
     return located
 
 
@@ -135,8 +162,17 @@ def load_professor_responses(path: str | Path, *, synthetic: bool) -> ImportResu
     either synthetic demo data or real pilot data, never a mix."""
     path = Path(path)
     raw = path.read_bytes()
-    text = raw.decode("utf-8-sig")  # utf-8-sig drops the byte-order mark Excel adds
-    rows = list(csv.reader(io.StringIO(text)))
+    try:
+        text = raw.decode("utf-8-sig")  # utf-8-sig drops the byte-order mark Excel adds
+    except UnicodeDecodeError as error:
+        raise FormImportError(
+            f"{path.name} is not saved as UTF-8 text. In Excel, use File > Save As > 'CSV UTF-8' "
+            "(plain 'CSV' breaks characters such as the dash in the answer options)."
+        ) from error
+    try:
+        rows = list(csv.reader(io.StringIO(text)))
+    except csv.Error as error:
+        raise FormImportError(f"{path.name} could not be read as a CSV file: {error}.") from error
     if not rows:
         raise FormImportError(f"{path.name} is empty.")
     header, data_rows = rows[0], rows[1:]
@@ -179,7 +215,7 @@ def load_professor_responses(path: str | Path, *, synthetic: bool) -> ImportResu
         source = (
             "synthetic demo response (fictional instructor, not real data)"
             if synthetic
-            else f"self-reported by the instructor via the Prof-Match form ({term})"
+            else f"self-reported by the instructor via the {PRODUCT_NAME} form ({term})"
         )
         entry = ProfessorEntry(
             row_number=row_number,

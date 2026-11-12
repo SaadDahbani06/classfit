@@ -3,12 +3,16 @@
 No language model and no invented facts: every sentence is a template filled with
 numbers that already exist in a MatchResult. Same input -> same text, always.
 
-Thresholds (project decisions, documented so they can be defended or changed):
-- A "reason" is a rated dimension within 1 scale point (similarity >= 0.75).
-  At most two are shown, those that earned the most points. If none qualify,
-  no reasons are shown — we do not manufacture positives.
-- A "tradeoff" is a rated dimension 2+ scale points apart (similarity <= 0.5).
-  The one that cost the most points is shown.
+Every question the student rated is explained in exactly one place, so a card can
+never hide a mismatch that lowered the score:
+- close:    within 1 step of the student's answer (similarity >= 0.75),
+            listed by points earned;
+- tradeoff: more than 1 step apart (similarity < 0.75), listed by points lost;
+- unknown:  the instructor gave no single answer ("Varies / unable to answer" or
+            blank), so the question is left out of their score.
+Gaps are counted in "steps" between answers so they are not confused with score points.
+Sentences say "the instructor answered" because every profile is an instructor's
+self-report; revisit the wording if profiles ever combine other sources.
 """
 
 from __future__ import annotations
@@ -28,54 +32,57 @@ from .matching import (
     MatchResult,
     round_half_up,
 )
-from .scale import DIMENSION_LABELS, DIMENSIONS, IMPORTANCE_LABELS, SCALE_ANCHORS
+from .scale import (
+    DIMENSION_LABELS,
+    DIMENSIONS,
+    IMPORTANCE_LABELS,
+    QUESTION_BY_KEY,
+    SCALE_SPAN,
+    UNKNOWN_ANSWER_LABEL,
+)
 
-REASON_MIN_SIMILARITY = Fraction(3, 4)
-TRADEOFF_MAX_SIMILARITY = Fraction(1, 2)
-MAX_REASONS = 2
+CLOSE_MAX_GAP = 1
+CLOSE_MIN_SIMILARITY = 1 - Fraction(CLOSE_MAX_GAP, SCALE_SPAN)  # 3/4
 
-NOT_A_PREDICTION = "Alignment reflects your stated preferences only. It is not a grade prediction."
-NO_CLOSE_MATCH = "No dimension you rated is within 1 point of your preference."
+NOT_A_PREDICTION = (
+    "Alignment measures how closely your answers agree with the instructor's answers. "
+    "It does not predict grades or how well you will do, and it does not rate teaching quality."
+)
 
 
 @dataclass(frozen=True)
 class Explanation:
     section_id: str
     headline: str
-    reasons: tuple[str, ...]
-    tradeoff: str | None
-    missing: tuple[str, ...]
-    details: tuple[str, ...]   # one line per dimension: the full "Why this result?" breakdown
+    reasons: tuple[str, ...]    # rated questions within 1 step, most points earned first
+    tradeoffs: tuple[str, ...]  # rated questions more than 1 step apart, most points lost first
+    missing: tuple[str, ...]    # rated questions this instructor gave no single answer to
+    details: tuple[str, ...]    # one line per question: the full "Why this result?" breakdown
+    calculation: str | None     # the alignment formula with this student's numbers
     caveats: tuple[str, ...]
 
 
 def _fmt_number(value: int | float) -> str:
-    return str(int(value)) if float(value).is_integer() else f"{value:g}"
+    return str(int(value)) if float(value).is_integer() else f"{float(value):g}"
+
+
+def short_value(dimension: str, value: int | float | None) -> str:
+    """'Often'; 'between About half and Often' for a value such as 3.5; 'unknown'."""
+    if value is None:
+        return "unknown"
+    answers = QUESTION_BY_KEY[dimension].answers
+    if float(value).is_integer():
+        return answers[int(value) - 1][0]
+    return f"between {answers[int(value) - 1][0]} and {answers[int(value)][0]}"
 
 
 def describe_value(dimension: str, value: int | float | None) -> str:
-    """'2 (between mostly lecture and roughly balanced)', '5 (mostly group work)', 'unknown'."""
+    """'Often (61–80% of class sessions)'; '3.5, between About half and Often'; 'unknown'."""
     if value is None:
         return "unknown"
-    anchors = SCALE_ANCHORS[dimension]
-    if value in anchors:
-        return f"{_fmt_number(value)} ({anchors[int(value)]})"
-    points = sorted(anchors)
-    low = max(a for a in points if a < value)
-    high = min(a for a in points if a > value)
-    return f"{_fmt_number(value)} (between {anchors[low]} and {anchors[high]})"
-
-
-def _importance(weight: int) -> str:
-    return f"{IMPORTANCE_LABELS[weight]} ({weight})"
-
-
-def _pts(x: Fraction) -> str:
-    return f"{float(x):.2f}"
-
-
-def _of_points(n: int) -> str:
-    return f"of {n} point" if n == 1 else f"of {n} points"
+    if float(value).is_integer():
+        return QUESTION_BY_KEY[dimension].answers[int(value) - 1][1]
+    return f"{_fmt_number(value)}, {short_value(dimension, value)}"
 
 
 def format_percent(fraction: Fraction) -> str:
@@ -83,121 +90,119 @@ def format_percent(fraction: Fraction) -> str:
     return f"{round_half_up(fraction * 100)}%"
 
 
-def _gap(d: DimensionResult) -> str:
+def _pts(x: Fraction) -> str:
+    return f"{float(x):.2f}"
+
+
+def _steps(d: DimensionResult) -> str:
     gap = abs(d.preference - d.observed)
-    return f"{_fmt_number(gap)}-point gap"
+    return f"{_fmt_number(gap)} step apart" if gap == 1 else f"{_fmt_number(gap)} steps apart"
+
+
+def _reason(d: DimensionResult) -> str:
+    label, importance = DIMENSION_LABELS[d.dimension], IMPORTANCE_LABELS[d.weight]
+    if d.similarity == 1:
+        return f"Same answer on {label}: {short_value(d.dimension, d.observed)}. You rated this {importance}."
+    return (
+        f"Close on {label}: you chose {short_value(d.dimension, d.preference)}, the instructor answered "
+        f"{short_value(d.dimension, d.observed)} ({_steps(d)}). You rated this {importance}."
+    )
+
+
+def _tradeoff(d: DimensionResult) -> str:
+    return (
+        f"Tradeoff on {DIMENSION_LABELS[d.dimension]}: you chose {short_value(d.dimension, d.preference)}, "
+        f"the instructor answered {short_value(d.dimension, d.observed)} ({_steps(d)}). "
+        f"You rated this {IMPORTANCE_LABELS[d.weight]}."
+    )
+
+
+def _missing(d: DimensionResult) -> str:
+    return (
+        f"Not comparable on {DIMENSION_LABELS[d.dimension]}: this instructor answered "
+        f"'{UNKNOWN_ANSWER_LABEL}' or left it blank. You rated this {IMPORTANCE_LABELS[d.weight]}."
+    )
 
 
 def _detail_line(d: DimensionResult) -> str:
-    label = DIMENSION_LABELS[d.dimension].capitalize()
-    section = describe_value(d.dimension, d.observed)
+    topic = QUESTION_BY_KEY[d.dimension].topic
+    instructor = describe_value(d.dimension, d.observed)
     if d.status == NOT_REQUESTED:
-        return f"{label}: no preference, not used in the score. This section: {section}."
+        return f"{topic}: no preference, so not used. The instructor answered {instructor}."
     you = describe_value(d.dimension, d.preference)
     if d.status == MISSING:
         return (
-            f"{label}: you {you}; this section: unknown (no usable evidence, not assumed neutral). "
-            f"Importance {_importance(d.weight)}. Excluded from the score."
+            f"{topic}: you chose {you}; the instructor answered '{UNKNOWN_ANSWER_LABEL}' or left it blank. "
+            f"Never guessed, so left out of the score (importance {d.weight})."
         )
-    values = (
-        f"you and this section both {you}"
-        if d.preference == d.observed
-        else f"you {you}; this section {section}"
-    )
-    return (
-        f"{label}: {values}. Importance {_importance(d.weight)}. "
-        f"Similarity {float(d.similarity):.2f} -> {_pts(d.contribution)} {_of_points(d.weight)}."
-    )
+    points = "point" if d.weight == 1 else "points"
+    product = f"similarity {float(d.similarity):.2f} × importance {d.weight} = {_pts(d.contribution)} of {d.weight} {points}"
+    if d.similarity == 1:
+        return f"{topic}: you and the instructor both answered {you}, so {product}."
+    return f"{topic}: you chose {you}; the instructor answered {instructor}. {_steps(d).capitalize()}, so {product}."
 
 
-def _reasons(result: MatchResult) -> tuple[str, ...]:
-    candidates = [
-        d for d in result.dimensions if d.status == SCORED and d.similarity >= REASON_MIN_SIMILARITY
-    ]
-    candidates.sort(key=lambda d: (-d.contribution, DIMENSIONS.index(d.dimension)))
-    reasons = []
-    for d in candidates[:MAX_REASONS]:
-        label = DIMENSION_LABELS[d.dimension]
-        if d.similarity == 1:
-            reasons.append(
-                f"Matches your preference on {label}: {describe_value(d.dimension, d.observed)}. "
-                f"You rated this {IMPORTANCE_LABELS[d.weight]}."
-            )
-        else:
-            reasons.append(
-                f"Close to your preference on {label}: you {_fmt_number(d.preference)}, "
-                f"this section {describe_value(d.dimension, d.observed)}. "
-                f"You rated this {IMPORTANCE_LABELS[d.weight]}."
-            )
-    return tuple(reasons)
-
-
-def _tradeoff(result: MatchResult) -> str | None:
-    candidates = [
-        d for d in result.dimensions if d.status == SCORED and d.similarity <= TRADEOFF_MAX_SIMILARITY
-    ]
-    if not candidates:
+def _calculation(result: MatchResult) -> str | None:
+    if result.alignment is None:
         return None
-    # The mismatch that cost the most weighted points, not simply the biggest gap.
-    d = min(candidates, key=lambda d: (-d.lost, DIMENSIONS.index(d.dimension)))
+    earned = sum((d.contribution for d in result.dimensions if d.status == SCORED), Fraction(0))
+    scope = "" if result.status == COMPLETE else ", counting only the questions this instructor answered"
     return (
-        f"Tradeoff on {DIMENSION_LABELS[d.dimension]}: you prefer "
-        f"{describe_value(d.dimension, d.preference)}; this section is "
-        f"{describe_value(d.dimension, d.observed)}. That's a {_gap(d)} on something you rated "
-        f"{IMPORTANCE_LABELS[d.weight]}."
-    )
-
-
-def _missing_lines(result: MatchResult) -> tuple[str, ...]:
-    return tuple(
-        f"No usable evidence on {DIMENSION_LABELS[d.dimension]}, which you rated "
-        f"{IMPORTANCE_LABELS[d.weight]}."
-        for d in result.dimensions
-        if d.status == MISSING
+        f"Alignment = 100 × points earned ÷ points possible{scope} = 100 × {_pts(earned)} ÷ "
+        f"{result.known_weight} = {float(result.alignment):.1f}, shown as {result.display_score}."
     )
 
 
 def _headline(result: MatchResult) -> str:
     if result.status == NO_PREFERENCES:
-        return "No score: every dimension is marked 'No preference'. Descriptive comparison only."
+        return "No score: every question is set to 'No preference'."
     if result.status == INSUFFICIENT_EVIDENCE:
-        return "No score: insufficient evidence. No data on any dimension you rated."
+        return "No score: this instructor gave no single answer on any question you rated."
     if result.status == PARTIAL:
         missing = ", ".join(DIMENSION_LABELS[d] for d in result.missing_dimensions)
         return (
-            f"Not ranked: more information needed ({missing}). Partial alignment "
-            f"{result.display_score}/100 based on {format_percent(result.coverage)} of your importance "
-            "weight; it cannot be compared fairly with fully documented sections."
+            f"Not ranked: no single answer on {missing}. On the questions it can be compared on "
+            f"({format_percent(result.coverage)} of your importance weight), alignment is "
+            f"{result.display_score}/100, which can't be compared fairly with fully answered sections."
         )
     if result.status == COMPLETE:
-        return (
-            f"Alignment {result.display_score}/100. Evidence covers every dimension you rated "
-            f"({format_percent(result.coverage)} coverage)."
-        )
+        rated = sum(1 for d in result.dimensions if d.status == SCORED)
+        scope = "the one question you rated" if rated == 1 else f"all {rated} questions you rated"
+        return f"Alignment {result.display_score}/100 across {scope}."
     raise ValueError(f"Unknown status {result.status!r}")  # defensive: new status added without template
 
 
 def explain(result: MatchResult) -> Explanation:
-    caveats = [NOT_A_PREDICTION, f"Evidence source: {result.profile.source}."]
+    scored = [d for d in result.dimensions if d.status == SCORED]
+    close = sorted(
+        (d for d in scored if d.similarity >= CLOSE_MIN_SIMILARITY),
+        key=lambda d: (-d.contribution, DIMENSIONS.index(d.dimension)),
+    )
+    far = sorted(
+        (d for d in scored if d.similarity < CLOSE_MIN_SIMILARITY),
+        key=lambda d: (-d.lost, DIMENSIONS.index(d.dimension)),
+    )
+    caveats = [NOT_A_PREDICTION, f"Instructor answers: {result.profile.source}."]
     if result.profile.is_synthetic:
         caveats.insert(0, "SYNTHETIC: fictional data used for demonstration only.")
-    scored = result.status in (COMPLETE, PARTIAL)
     return Explanation(
         section_id=result.section_id,
         headline=_headline(result),
-        reasons=_reasons(result) if scored else (),
-        tradeoff=_tradeoff(result) if scored else None,
-        missing=_missing_lines(result),
+        reasons=tuple(_reason(d) for d in close),
+        tradeoffs=tuple(_tradeoff(d) for d in far),
+        missing=tuple(_missing(d) for d in result.dimensions if d.status == MISSING),
         details=tuple(_detail_line(d) for d in result.dimensions),
+        calculation=_calculation(result),
         caveats=tuple(caveats),
     )
 
 
 __all__ = [
+    "CLOSE_MAX_GAP",
     "Explanation",
     "NOT_A_PREDICTION",
-    "NO_CLOSE_MATCH",
     "describe_value",
     "explain",
     "format_percent",
+    "short_value",
 ]

@@ -1,11 +1,11 @@
-"""Command-line demo of the M0 engine on synthetic PM101 data.
+"""Command-line demo of the engine on synthetic PM101 data (questionnaire v2).
 
     python -m profmatch.demo                      # both demo students
     python -m profmatch.demo --student 1          # one demo student
-    python -m profmatch.demo --prefs 2,5,1,4 --weights 3,0,2,1
+    python -m profmatch.demo --prefs 5,3,-,4,1,4 --weights 3,1,0,2,3,2
                                                   # your own inputs; use '-' for No preference
 
-Order of values: format, assessment, collaboration, structure.
+Order of values: discussion, practice, plan, balance, exams, collaboration.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .explanations import NO_CLOSE_MATCH, explain, format_percent
+from .explanations import explain, format_percent
 from .matching import (
     MODE_NO_PREFERENCES,
     MODE_NO_SECTIONS,
@@ -89,15 +89,15 @@ def render_comparison(comparison: Comparison, title: str, prefs: StudentPreferen
         lines.append(f"  [{r.section_id}] {exp.headline}")
         for reason in exp.reasons:
             lines.append(f"      + {reason}")
-        if not exp.reasons and r.alignment is not None:
-            lines.append(f"      ({NO_CLOSE_MATCH})")
-        if exp.tradeoff:
-            lines.append(f"      - {exp.tradeoff}")
+        for tradeoff in exp.tradeoffs:
+            lines.append(f"      - {tradeoff}")
         for missing in exp.missing:
             lines.append(f"      ? {missing}")
         for detail in exp.details:
             lines.append(f"        . {detail}")
-    lines += ["", f"  Method version: {comparison.method_version}"]
+        if exp.calculation:
+            lines.append(f"        = {exp.calculation}")
+    lines += ["", f"  Questionnaire {comparison.questionnaire_version}; method version: {comparison.method_version}"]
     return "\n".join(lines)
 
 
@@ -116,10 +116,10 @@ def _parse_list(text: str, allow_none: bool) -> list[int | None]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Prof-Match M0 demo on synthetic PM101 data.")
+    parser = argparse.ArgumentParser(description="ClassFit demo on synthetic PM101 data (questionnaire v2).")
     parser.add_argument("--student", choices=sorted(DEMO_STUDENTS), help="run one demo student")
-    parser.add_argument("--prefs", help="your preferences, e.g. 2,5,1,4 ('-' = no preference)")
-    parser.add_argument("--weights", help="your importance weights 0-3, e.g. 3,3,2,1")
+    parser.add_argument("--prefs", help="your preferences, e.g. 5,3,-,4,1,4 ('-' = no preference)")
+    parser.add_argument("--weights", help="your importance weights 0-3, e.g. 3,1,0,2,3,2")
     args = parser.parse_args(argv)
 
     print("=" * 78)

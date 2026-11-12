@@ -1,7 +1,9 @@
-"""Prof-Match: explainable comparison of sections of the same course.
+"""ClassFit (working name; package still called profmatch): explainable comparison
+of sections of the same course.
 
-A content-based, rule-based recommender. Not a trained machine-learning model,
-not a grade prediction.
+A content-based, rule-based recommender: a fixed, documented formula compares a
+student's stated preferences with instructors' descriptions of their course. Not a
+trained machine-learning model, not AI, not a grade prediction.
 """
 
 from .explanations import Explanation, explain

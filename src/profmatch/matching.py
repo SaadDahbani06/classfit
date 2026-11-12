@@ -9,6 +9,11 @@ For student preference p_j, profile value x_j and importance weight w_j:
     alignment    = 100 * sum(w_j * similarity_j for j in K) / W_known
     coverage     = W_known / W
 
+Equivalently, alignment = 100 * (1 - sum(w_j * |p_j - x_j|) / (4 * W_known)): the
+weighted average gap, scaled so identical answers give 100 and opposite ends give 0.
+This treats neighbouring answers as equally far apart; see scale.py for which
+questions that suits.
+
 Arithmetic is exact (fractions.Fraction), so 8/9 stays 8/9 instead of
 0.8888888888888888. That makes rounding and tie detection deterministic: no score
 can land on the wrong side of a .5 boundary because of floating-point error.
@@ -22,11 +27,12 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 from .models import SectionProfile, StudentPreferences
-from .scale import DIMENSIONS, SCALE_SPAN
+from .scale import DIMENSIONS, QUESTIONNAIRE_VERSION, SCALE_SPAN
 from .validation import ValidationError
 
 # Identifies the scoring + missingness + ranking policy. Bump it whenever any of
 # those rules change, so evaluation results from different policies never mix.
+# The questions themselves are versioned separately (scale.QUESTIONNAIRE_VERSION).
 METHOD_VERSION = "m0-weighted-distance-complete-only-v1"
 
 # Per-dimension status
@@ -101,6 +107,7 @@ class Comparison:
     needs_more_info: tuple[MatchResult, ...] # partial / insufficient, by section ID (not by score)
     all_results: tuple[MatchResult, ...]     # every section, by section ID
     method_version: str = METHOD_VERSION
+    questionnaire_version: str = QUESTIONNAIRE_VERSION
 
 
 def similarity(preference: int, observed: int | float) -> Fraction:

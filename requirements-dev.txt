@@ -2,3 +2,5 @@
 # installed and run (Python 3.13.16, October 14, 2026).
 -r requirements.txt
 pytest==9.1.1
+# For scripts/make_pdfs.py only (installed and run October 19, 2026).
+markdown==3.8

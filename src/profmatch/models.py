@@ -36,7 +36,7 @@ class StudentPreferences:
     def from_lists(
         cls, values: Sequence[int | None], weights: Sequence[int]
     ) -> StudentPreferences:
-        """Build from lists in DIMENSIONS order: format, assessment, collaboration, structure."""
+        """Build from lists in DIMENSIONS order: discussion, practice, plan, balance, exams, collaboration."""
         if len(values) != len(DIMENSIONS) or len(weights) != len(DIMENSIONS):
             raise ValidationError(
                 f"Expected {len(DIMENSIONS)} values and {len(DIMENSIONS)} weights in the order "
